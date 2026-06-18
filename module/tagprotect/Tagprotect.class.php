@@ -24,7 +24,7 @@ class Tagprotect extends \FreePBX_Helpers implements \BMO {
 			'outbound'   => '1',
 			'base_url'   => 'https://callblocker.overcloud.us/api/v1',
 			'api_key'    => '',
-			'requester'  => 'pbx',
+			'requester'  => '',
 			'lists'      => 'all',
 			'timeout_ms' => '1500',
 			'cache_ttl'  => '86400',
