@@ -25,11 +25,15 @@ FPR=$(G --list-keys --with-colons "$UID2" | awk -F: '/^fpr:/{print $10; exit}')
 echo "$FPR:6:" | G --import-ownertrust >/dev/null 2>&1
 
 # 3. build manifest + clearsign -> module.sig
-TMP=$(mktemp)
+#    (temp file must be readable by the asterisk user that runs gpg)
+TMP=$(mktemp); chmod 0644 "$TMP"
 sudo -u asterisk php "$HELPER" "${FPR: -16}" > "$TMP"
+if [ ! -s "$TMP" ]; then echo "  manifest generation failed; skipping"; rm -f "$TMP"; exit 0; fi
+rm -f "$MOD/module.sig"
 G --batch --yes --pinentry-mode loopback --passphrase "" --digest-algo SHA256 \
   --clearsign --output "$MOD/module.sig" "$TMP" >/dev/null 2>&1
 rm -f "$TMP"
+if [ ! -s "$MOD/module.sig" ]; then echo "  clearsign failed; module left unsigned"; exit 0; fi
 chown asterisk:asterisk "$MOD/module.sig"
 
 # 4. re-verify, cache the result, and clear the stale notification

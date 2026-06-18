@@ -1,23 +1,12 @@
-# TAG Protect - ALWAYS-ALLOW list (numbers that must NEVER be blocked).
-#
-# Edit this file on GitHub, then on each PBX run:   tagprotect resync
-# One entry per line. Digits or short codes; punctuation/spaces are ignored.
-# Lines starting with # are comments. US 10<->11 digit (+1) handled automatically.
-#
-# For per-site additions you DON'T want in git, use the local file instead:
-#   /etc/asterisk/tagprotect-emergency.local.txt   (never overwritten by resync)
-#
-# Source: TAG "Emergency Numbers (non-exhaustive list)".
-
-# --- Core emergency ---
+# Core emergency
 911
 988
 
-# --- Poison control ---
+# Poison control
 800-222-1222
 844-764-7669
 
-# --- Hatzalah / Hatzoloh ---
+# Hatzalah / Hatzoloh
 732-370-3600
 732-888-3000
 718-230-1000
@@ -26,3 +15,4 @@
 514-341-1818
 877-341-1818
 800-613-1911
+845-783-1212

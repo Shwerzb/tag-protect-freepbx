@@ -1,17 +1,3 @@
-# TAG Protect — Always-Allow List
-#
-# Numbers listed here are NEVER blocked. Edit this file (on GitHub), then update each PBX:
-#   • GUI:  click "Resync allowed numbers" on the TAG Protect page
-#   • CLI:  run  tagprotect resync
-#
-# Format:
-#   • One number per line; digits or short codes. Formatting and spaces are ignored.
-#   • Lines beginning with "#" are comments.
-#   • US +1 / 10-digit numbers are matched interchangeably.
-#
-# For numbers specific to one site (not shared here), use the local list instead:
-#   /etc/asterisk/tagprotect-emergency.local.txt   (or run: tagprotect allow <number>)
-
 # Core emergency
 911
 988
