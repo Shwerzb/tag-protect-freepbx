@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# TAG Protect management CLI.  Installed to /usr/local/bin/tagprotect
+set -euo pipefail
+
+REPODIR=/usr/local/lib/tag-protect-freepbx
+ETC=/etc/asterisk
+EXT=$ETC/extensions_custom.conf
+CONF=$ETC/tagprotect.conf
+ALLOW=$ETC/tagprotect-emergency.txt
+LOCAL=$ETC/tagprotect-emergency.local.txt
+SOUNDS=/var/lib/asterisk/sounds/en/custom
+AGI=/var/lib/asterisk/agi-bin/tag-check.php
+CACHE=/var/lib/asterisk/tagprotect/cache.db
+MARK="; === TAG-PROTECT (managed by addon) ==="
+
+g(){ printf '\033[32m%s\033[0m\n' "$*"; }
+y(){ printf '\033[33m%s\033[0m\n' "$*"; }
+r(){ printf '\033[31m%s\033[0m\n' "$*"; }
+need_root(){ [ "$(id -u)" -eq 0 ] || { r "run as root (sudo tagprotect $1)"; exit 1; }; }
+cfg(){ sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$CONF" 2>/dev/null | head -1; }
+reload(){ if command -v fwconsole >/dev/null; then fwconsole reload >/dev/null 2>&1 || asterisk -rx "dialplan reload" >/dev/null; else asterisk -rx "dialplan reload" >/dev/null; fi; }
+repo_info(){ [ -f "$REPODIR/.repo-info" ] && . "$REPODIR/.repo-info" || { GH_REPO=""; BRANCH=main; }; }
+
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+
+  status)
+    g "TAG Protect status"
+    echo "  version : $(cat "$REPODIR/VERSION" 2>/dev/null || echo '?')"
+    echo "  api key : $(cfg api_key | sed 's/\(cbk_....\).*/\1.../')"
+    echo "  lists   : $(cfg lists)"
+    echo "  request : $(cfg requester)"
+    echo "  cacheTTL: $(cfg cache_ttl)s"
+    echo "  allow   : $(grep -cvE '^\s*(#|$)' "$ALLOW" 2>/dev/null||echo 0) shipped + $(grep -cvE '^\s*(#|$)' "$LOCAL" 2>/dev/null||echo 0) local"
+    if command -v sqlite3 >/dev/null; then echo "  cached  : $(sqlite3 "$CACHE" 'SELECT COUNT(*) FROM cache;' 2>/dev/null||echo 0) numbers"; fi
+    echo "  inbound routes:"
+    php "$REPODIR/lib/wire-inbound.php" status 2>/dev/null || y "    (could not read routes)"
+    ;;
+
+  test)
+    n="${1:?usage: tagprotect test <number>}"
+    curl -s --max-time 8 -X POST "$(cfg base_url)/lists/check" -H "X-API-Key: $(cfg api_key)" \
+      -H 'Content-Type: application/json' \
+      -d "{\"number\":\"$n\",\"lists\":[\"$(cfg lists)\"],\"requester\":\"$(cfg requester)\"}"; echo
+    ;;
+
+  resync)            # pull latest always-allow list from git + reload
+    need_root resync; repo_info
+    g "==> resyncing always-allow list from git ($GH_REPO@$BRANCH) ..."
+    git -C "$REPODIR" fetch --depth=1 origin "$BRANCH" && git -C "$REPODIR" reset --hard "origin/$BRANCH"
+    install -o asterisk -g asterisk -m 0644 "$REPODIR/always-allow.txt" "$ALLOW"
+    reload; g "  always-allow list updated ($(grep -cvE '^\s*(#|$)' "$ALLOW") entries)."
+    ;;
+
+  allow)             # add a number to the LOCAL always-allow list (not git)
+    need_root allow; n="${1:?usage: tagprotect allow <number>}"
+    d="$(echo "$n" | tr -cd '0-9')"
+    touch "$LOCAL"; chown asterisk:asterisk "$LOCAL"
+    if grep -qxF "$n" "$LOCAL" 2>/dev/null; then y "  already present"; else echo "$n" >>"$LOCAL"; g "  added $n to local always-allow"; fi
+    [ -n "$d" ] && command -v sqlite3 >/dev/null && sqlite3 "$CACHE" "DELETE FROM cache WHERE num IN ('$d','1$d','${d#1}');" 2>/dev/null || true
+    ;;
+
+  update)            # update addon code from git, keep config
+    need_root update; repo_info
+    g "==> updating addon from git ..."
+    git -C "$REPODIR" fetch --depth=1 origin "$BRANCH" && git -C "$REPODIR" reset --hard "origin/$BRANCH"
+    install -o asterisk -g asterisk -m 0750 "$REPODIR/tag-check.php" "$AGI"
+    install -o asterisk -g asterisk -m 0644 "$REPODIR/always-allow.txt" "$ALLOW"
+    install -m 0755 "$REPODIR/bin/tagprotect" /usr/local/bin/tagprotect
+    if command -v sox >/dev/null && [ -f "$REPODIR/sounds/tag-blocked.wav" ]; then
+      sox "$REPODIR/sounds/tag-blocked.wav" -r 8000 -c 1 -b 16 "$SOUNDS/tag-blocked.wav" 2>/dev/null || true
+      sox "$REPODIR/sounds/tag-blocked.wav" -r 8000 -c 1 -t ul "$SOUNDS/tag-blocked.ulaw" 2>/dev/null || true
+      chown asterisk:asterisk "$SOUNDS"/tag-blocked.* 2>/dev/null || true
+    fi
+    reload; g "  updated to $(cat "$REPODIR/VERSION" 2>/dev/null)."
+    ;;
+
+  wire-in)   need_root wire-in;   php "$REPODIR/lib/wire-inbound.php" wire;   reload; g "inbound wired" ;;
+  unwire-in) need_root unwire-in; php "$REPODIR/lib/wire-inbound.php" unwire; reload; g "inbound restored" ;;
+
+  clearcache) need_root clearcache; rm -f "$CACHE"; g "cache cleared (rebuilds automatically)" ;;
+
+  uninstall)
+    need_root uninstall
+    y "This restores inbound routes and removes TAG screening. Continue? (y/n)"
+    read -r a </dev/tty; case "$a" in y|Y) ;; *) echo "aborted"; exit 0;; esac
+    php "$REPODIR/lib/wire-inbound.php" unwire 2>/dev/null || true
+    # strip the dialplan block (our marker to end of file - it is appended last)
+    if grep -qF "$MARK" "$EXT" 2>/dev/null; then
+      sed -i "/^; === TAG-PROTECT (managed by addon) ===$/,\$d" "$EXT"
+    fi
+    reload
+    g "uninstalled. (config + always-allow files left in $ETC; delete manually if desired)"
+    ;;
+
+  *)
+    cat <<H
+TAG Protect CLI
+  tagprotect status            show config, inbound routes, cache
+  tagprotect test <number>     check a number against TAG now
+  tagprotect resync            pull latest always-allow list from GitHub + reload
+  tagprotect allow <number>    add a number to the LOCAL always-allow list
+  tagprotect update            update the whole addon from GitHub
+  tagprotect wire-in           route inbound calls through screening
+  tagprotect unwire-in         restore inbound routes (stop inbound screening)
+  tagprotect clearcache        empty the local result cache
+  tagprotect uninstall         remove screening and restore routes
+H
+    ;;
+esac

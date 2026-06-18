@@ -1,0 +1,25 @@
+<module>
+	<rawname>tagprotect</rawname>
+	<repo>local</repo>
+	<name>TAG Protect</name>
+	<version>1.0.0</version>
+	<publisher>Shwerzb</publisher>
+	<license>GPLv3+</license>
+	<licenselink>https://www.gnu.org/licenses/gpl-3.0.txt</licenselink>
+	<category>Connectivity</category>
+	<description>Block inbound and outbound calls against TAG Protect lists, with a local cache, always-allow list, and a recorded block message. Configure everything from this page.</description>
+	<changelog>
+		*1.0.0* Initial GUI module: settings, always-allow editor, per-route inbound screening, number tester.
+	</changelog>
+	<depends>
+		<engine>asterisk 16</engine>
+		<module>framework ge 17.0</module>
+		<module>core ge 17.0</module>
+	</depends>
+	<menuitems>
+		<tagprotect>TAG Protect</tagprotect>
+	</menuitems>
+	<supported>
+		<version>17.0</version>
+	</supported>
+</module>

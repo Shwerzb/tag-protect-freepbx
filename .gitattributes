@@ -1,0 +1,9 @@
+# Force Unix (LF) line endings on checkout so shell/PHP scripts run on Linux PBXes.
+*.sh   text eol=lf
+*.php  text eol=lf
+*.txt  text eol=lf
+*.md   text eol=lf
+VERSION text eol=lf
+bin/tagprotect text eol=lf
+# Binary
+*.wav  binary
