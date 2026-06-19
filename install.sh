@@ -24,8 +24,7 @@ command -v git >/dev/null || { echo "git is required but could not be installed.
 
 if [ -d "$DEST/.git" ]; then
   echo "==> updating existing copy ..."
-  git -C "$DEST" fetch --depth=1 origin "$BRANCH"
-  git -C "$DEST" reset --hard "origin/$BRANCH"
+  ( cd "$DEST" && git fetch --depth=1 origin "$BRANCH" && git reset --hard "origin/$BRANCH" )
 else
   echo "==> downloading addon ..."
   rm -rf "$DEST"

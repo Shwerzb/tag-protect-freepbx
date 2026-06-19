@@ -28,7 +28,7 @@ command -v git >/dev/null || (yum -y install git || apt-get -y update && apt-get
 command -v git >/dev/null || { r "git is required."; exit 1; }
 
 # 1) download / update the repo
-if [ -d "$SRC/.git" ]; then git -C "$SRC" fetch --depth=1 origin "$BRANCH" && git -C "$SRC" reset --hard "origin/$BRANCH"
+if [ -d "$SRC/.git" ]; then ( cd "$SRC" && git fetch --depth=1 origin "$BRANCH" && git reset --hard "origin/$BRANCH" )
 else rm -rf "$SRC"; git clone --depth=1 -b "$BRANCH" "https://github.com/$GH_REPO.git" "$SRC"; fi
 
 # 2) place the module + install it

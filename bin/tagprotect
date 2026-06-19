@@ -47,7 +47,7 @@ case "$cmd" in
   resync)            # pull latest always-allow list from git + reload
     need_root resync; repo_info
     g "==> resyncing always-allow list from git ($GH_REPO@$BRANCH) ..."
-    git -C "$REPODIR" fetch --depth=1 origin "$BRANCH" && git -C "$REPODIR" reset --hard "origin/$BRANCH"
+    ( cd "$REPODIR" && git fetch --depth=1 origin "$BRANCH" && git reset --hard "origin/$BRANCH" )
     install -o asterisk -g asterisk -m 0644 "$REPODIR/always-allow.txt" "$ALLOW"
     reload; g "  always-allow list updated ($(grep -cvE '^\s*(#|$)' "$ALLOW") entries)."
     ;;
@@ -63,7 +63,7 @@ case "$cmd" in
   update)            # update addon code from git, keep config
     need_root update; repo_info
     g "==> updating addon from git ..."
-    git -C "$REPODIR" fetch --depth=1 origin "$BRANCH" && git -C "$REPODIR" reset --hard "origin/$BRANCH"
+    ( cd "$REPODIR" && git fetch --depth=1 origin "$BRANCH" && git reset --hard "origin/$BRANCH" )
     install -o asterisk -g asterisk -m 0750 "$REPODIR/tag-check.php" "$AGI"
     install -o asterisk -g asterisk -m 0644 "$REPODIR/always-allow.txt" "$ALLOW"
     install -m 0755 "$REPODIR/bin/tagprotect" /usr/local/bin/tagprotect
