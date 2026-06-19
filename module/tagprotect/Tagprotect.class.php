@@ -10,6 +10,8 @@ class Tagprotect extends \FreePBX_Helpers implements \BMO {
 	const AGI_DST  = '/var/lib/asterisk/agi-bin/tag-check.php';
 	const SOUNDDIR = '/var/lib/asterisk/sounds/en/custom';
 	const CACHEDIR = '/var/lib/asterisk/tagprotect';
+	const COSMAP   = '/etc/asterisk/tagprotect-cosmap.json';   // ext -> COS group name
+	const COSCONF  = '/etc/asterisk/tagprotect-cos.json';      // COS group name -> TAG lists
 
 	public function __construct($freepbx = null) {
 		if ($freepbx === null) throw new \Exception('Not given a FreePBX Object');
@@ -87,6 +89,7 @@ class Tagprotect extends \FreePBX_Helpers implements \BMO {
 			} else { @copy($src, self::SOUNDDIR.'/tag-blocked.wav'); }
 			@chown(self::SOUNDDIR.'/tag-blocked.wav','asterisk'); @chgrp(self::SOUNDDIR.'/tag-blocked.wav','asterisk');
 		}
+		$this->writeCosFiles();
 	}
 
 	// ---- write /etc/asterisk/tagprotect.conf from settings ----
@@ -128,6 +131,74 @@ class Tagprotect extends \FreePBX_Helpers implements \BMO {
 		return array(true, sprintf(_("Resynced %d numbers from %s"), $n, $url));
 	}
 
+	// ---- COS integration ----
+
+	/** Return all COS groups with member count and current TAG lists override. */
+	public function cosGroups() {
+		$out = array();
+		$saved = $this->getCosGroupConfig();
+		try {
+			$stmt = $this->db->prepare("SELECT id, val FROM kvstore_Cos WHERE `key` = ?");
+			$stmt->execute(array("members"));
+			$rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+			foreach ($rows as $r) {
+				$members = json_decode($r['val'], true);
+				$count   = is_array($members) ? count($members) : 0;
+				$out[]   = array(
+					'name'        => $r['id'],
+					'memberCount' => $count,
+					'lists'       => isset($saved[$r['id']]) ? $saved[$r['id']] : '',
+				);
+			}
+		} catch (\Exception $e) {}
+		return $out;
+	}
+
+	/** Get the stored per-COS-group lists config as [groupName => listsString]. */
+	public function getCosGroupConfig() {
+		$v = $this->getConfig('cos_group_lists');
+		if (!$v) return array();
+		$d = json_decode($v, true);
+		return is_array($d) ? $d : array();
+	}
+
+	/** Save per-COS-group lists config and regenerate the runtime files. */
+	public function setCosGroupConfig(array $config) {
+		foreach ($config as $k => $v) $config[$k] = trim((string)$v);
+		$this->setConfig('cos_group_lists', json_encode($config));
+		$this->writeCosFiles();
+	}
+
+	/** Write tagprotect-cosmap.json (ext→group) and tagprotect-cos.json (group→lists). */
+	public function writeCosFiles() {
+		// Extension → group name map
+		$map = array();
+		try {
+			$rows = $this->db->query(
+				"SELECT id, val FROM kvstore_Cos WHERE `key`='members'"
+			)->fetchAll(\PDO::FETCH_ASSOC);
+			foreach ($rows as $r) {
+				$members = json_decode($r['val'], true);
+				if (!is_array($members)) continue;
+				foreach ($members as $ext => $active) {
+					if ($active) $map[(string)$ext] = $r['id'];
+				}
+			}
+		} catch (\Exception $e) {}
+		@file_put_contents(self::COSMAP, json_encode($map));
+		@chmod(self::COSMAP, 0640);
+		@chown(self::COSMAP, 'asterisk'); @chgrp(self::COSMAP, 'asterisk');
+
+		// Group name → lists override (only groups with a non-empty override)
+		$cosConf = array();
+		foreach ($this->getCosGroupConfig() as $gname => $lists) {
+			if ($lists !== '') $cosConf[$gname] = $lists;
+		}
+		@file_put_contents(self::COSCONF, json_encode($cosConf));
+		@chmod(self::COSCONF, 0640);
+		@chown(self::COSCONF, 'asterisk'); @chgrp(self::COSCONF, 'asterisk');
+	}
+
 	// ---- TAG API helpers ----
 	private function api($method, $path, $body = null) {
 		$ch = curl_init($this->get('base_url').$path);
@@ -144,8 +215,11 @@ class Tagprotect extends \FreePBX_Helpers implements \BMO {
 		if (!empty($r['json']['data']['lists'])) return $r['json']['data']['lists'];
 		return array();
 	}
-	public function testNumber($num) {
-		$r = $this->api('POST', '/lists/check', array('number'=>$num, 'lists'=>array($this->get('lists')), 'requester'=>$this->get('requester')));
+	public function testNumber($num, $listsOverride = null) {
+		$lists = $listsOverride !== null ? $listsOverride : $this->get('lists');
+		$listArr = array_filter(array_map('trim', explode(',', $lists)));
+		if (empty($listArr)) $listArr = array('all');
+		$r = $this->api('POST', '/lists/check', array('number'=>$num, 'lists'=>$listArr, 'requester'=>$this->get('requester')));
 		return isset($r['json']['data']) ? $r['json']['data'] : array('status'=>'error','message'=>($r['json']['error']['message'] ?? 'request failed'));
 	}
 
@@ -209,6 +283,7 @@ class Tagprotect extends \FreePBX_Helpers implements \BMO {
 	// ---- dialplan (called from functions.inc.php) ----
 	public function genDialplan(&$ext) {
 		if ($this->get('enabled') !== '1') return;
+		$this->writeCosFiles(); // refresh cosmap on every reload
 		// FreePBX 16 invokes the dialout predial hook via Macro() -> must end with MacroExit().
 		// FreePBX 17 invokes it via Gosub() -> must end with Return() (Macro app is gone in Asterisk 21+).
 		// Using the wrong one makes the hook "exit non-zero" and HANGS UP every outbound call.
@@ -233,7 +308,8 @@ class Tagprotect extends \FreePBX_Helpers implements \BMO {
 		$ext->add($cb, 's', '', new \ext_noop('TAG Protect blocked ${CALLERID(num)} -> ${OUTNUM}'));
 		$ext->add($cb, 's', '', new \ext_answer(''));
 		$ext->add($cb, 's', '', new \ext_wait('1'));
-		$ext->add($cb, 's', '', new \ext_playback('custom/tag-blocked'));
+		$sound = $this->get('blocked_sound') ?: 'custom/tag-blocked';
+		$ext->add($cb, 's', '', new \ext_playback($sound));
 		$ext->add($cb, 's', '', new \ext_hangup(''));
 	}
 

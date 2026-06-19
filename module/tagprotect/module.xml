@@ -2,13 +2,14 @@
 	<rawname>tagprotect</rawname>
 	<repo>local</repo>
 	<name>TAG Protect</name>
-	<version>1.0.0</version>
+	<version>1.1.0</version>
 	<publisher>Shwerzb</publisher>
 	<license>GPLv3+</license>
 	<licenselink>https://www.gnu.org/licenses/gpl-3.0.txt</licenselink>
 	<category>Connectivity</category>
-	<description>Block inbound and outbound calls against TAG Protect lists, with a local cache, always-allow list, and a recorded block message. Configure everything from this page.</description>
+	<description>Block inbound and outbound calls against TAG Protect lists, with a local cache, always-allow list, Class of Service per-group list overrides, configurable blocked-call recording, and a number tester.</description>
 	<changelog>
+		*1.1.0* Class of Service (COS) per-group list overrides; configurable blocked-call recording (select any system recording); number normalization (strip leading 1 from 11-digit numbers); extension-aware number tester; AGI preamble drain fix for FastAGI double-newline; cosmap refreshed on every dialplan reload.
 		*1.0.0* Initial GUI module: settings, always-allow editor, per-route inbound screening, number tester.
 	</changelog>
 	<depends>
@@ -20,7 +21,6 @@
 		<tagprotect>TAG Protect</tagprotect>
 	</menuitems>
 	<supported>
-		<version>16.0</version>
 		<version>17.0</version>
 	</supported>
 </module>
