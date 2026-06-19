@@ -13,13 +13,14 @@
 	</changelog>
 	<depends>
 		<engine>asterisk 16</engine>
-		<module>framework ge 17.0</module>
-		<module>core ge 17.0</module>
+		<module>framework ge 16.0</module>
+		<module>core ge 16.0</module>
 	</depends>
 	<menuitems>
 		<tagprotect>TAG Protect</tagprotect>
 	</menuitems>
 	<supported>
+		<version>16.0</version>
 		<version>17.0</version>
 	</supported>
 </module>
