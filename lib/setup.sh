@@ -87,7 +87,7 @@ else
 [macro-dialout-trunk-predial-hook]
 exten => s,1,AGI(tag-check.php,out,${OUTNUM})
  same => n,ExecIf($["${TAGPROTECT_BLOCKED}"="1"]?Goto(tag-blocked,s,1))
- same => n,Return()
+ same => n,__PREDIAL_EXIT__
 
 [tag-inbound-screen]
 exten => s,1,AGI(tag-check.php,in,${CALLERID(num)})
@@ -101,7 +101,12 @@ exten => s,1,NoOp(TAG Protect blocked ${CALLERID(num)} -> ${OUTNUM})
  same => n,Playback(custom/tag-blocked)
  same => n,Hangup()
 DP
-  g "  added dialplan (outbound hook + inbound context + blocked handler)"
+  # Predial hook terminator: FreePBX 16 calls it via Macro() (needs MacroExit);
+  # FreePBX 17 via Gosub() (needs Return). Wrong one hangs up every outbound call.
+  COREMAJ=$(php -r 'include "/etc/freepbx.conf"; $ci=FreePBX::Modules()->getInfo("core"); echo (int)($ci["core"]["version"] ?? 17);' 2>/dev/null)
+  PEXIT="Return()"; { [ -n "$COREMAJ" ] && [ "$COREMAJ" -lt 17 ]; } 2>/dev/null && PEXIT="MacroExit()"
+  sed -i "s|__PREDIAL_EXIT__|$PEXIT|" "$EXT"
+  g "  added dialplan (outbound hook + inbound context + blocked handler; predial exit: $PEXIT)"
 fi
 
 # ---- recording ----
