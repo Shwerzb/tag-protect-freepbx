@@ -209,12 +209,19 @@ class Tagprotect extends \FreePBX_Helpers implements \BMO {
 	// ---- dialplan (called from functions.inc.php) ----
 	public function genDialplan(&$ext) {
 		if ($this->get('enabled') !== '1') return;
+		// FreePBX 16 invokes the dialout predial hook via Macro() -> must end with MacroExit().
+		// FreePBX 17 invokes it via Gosub() -> must end with Return() (Macro app is gone in Asterisk 21+).
+		// Using the wrong one makes the hook "exit non-zero" and HANGS UP every outbound call.
+		$useGosub = null;
+		try { $ci = $this->FreePBX->Modules->getInfo('core'); if (!empty($ci['core']['version'])) $useGosub = ((int)$ci['core']['version'] >= 17); } catch (\Exception $e) {}
+		if ($useGosub === null) { $v = @shell_exec('asterisk -V 2>/dev/null'); if (preg_match('/Asterisk\s+\D*(\d+)/', (string)$v, $m)) $useGosub = ((int)$m[1] >= 20); }
+		if ($useGosub === null) $useGosub = true;
 		// outbound predial hook
 		if ($this->get('outbound') === '1') {
 			$c = 'macro-dialout-trunk-predial-hook';
 			$ext->add($c, 's', '', new \ext_agi('tag-check.php,out,${OUTNUM}'));
 			$ext->add($c, 's', '', new \ext_gotoif('$["${TAGPROTECT_BLOCKED}"="1"]', 'tag-blocked,s,1'));
-			$ext->add($c, 's', '', new \ext_return(''));
+			$ext->add($c, 's', '', $useGosub ? new \ext_return('') : new \ext_macroexit());
 		}
 		// inbound screen context (custom destinations point here)
 		$ci = 'tag-inbound-screen';
