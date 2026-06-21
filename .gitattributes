@@ -7,3 +7,4 @@ VERSION text eol=lf
 bin/tagprotect text eol=lf
 # Binary
 *.wav  binary
+*.xml  text eol=lf

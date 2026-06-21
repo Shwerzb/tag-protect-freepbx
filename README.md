@@ -7,7 +7,9 @@ call-blocking lists on FreePBX 16/17 (chan_pjsip). Install with a single command
 - **Always-allow list** — emergency and critical numbers (911, 988, Hatzalah, Poison Control…) are never blocked.
 - **Local cache** — repeat numbers are answered instantly (default 24h), minimizing API calls.
 - **Fail-open** — if the API is unreachable, calls connect normally; a caller is never stranded.
-- **Recorded message** — blocked callers hear a configurable prompt.
+- **Class of Service (COS)** — assign extensions to groups (Staff, Campers, etc.) and enforce different TAG lists per group.
+- **Configurable blocked-call recording** — select any system recording from the module settings page.
+- **Extension-aware number tester** — test any number as a specific extension to preview its COS-applied result.
 - **Two ways to manage** — a point-and-click FreePBX module, or a CLI.
 
 ---
@@ -127,8 +129,8 @@ routes to their original destinations.
 
 ## Notes
 
-- The blocked-call message is `sounds/tag-blocked.wav` — replace it and run `tagprotect update`
-  (or update the module) to change it.
+- The blocked-call recording is configurable from **Connectivity → TAG Protect** — any system
+  recording in FreePBX can be selected. The default fallback is `sounds/tag-blocked.wav`.
 - Never place emergency numbers on a blocklist; they belong in the always-allow list.
 - The module is self-hosted and unsigned, so FreePBX shows an "unsigned module" notice. This is
   expected; you can disable the check under *Settings → Advanced Settings → Module Signature Checking*.
